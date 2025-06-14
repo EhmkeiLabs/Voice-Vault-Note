@@ -108,3 +108,56 @@ Your entire "Voice Vault" system is now built. To test it:
 ![Pasted image 20250614134207](./Pasted%20image%2020250614134207.png)
 
 ![Pasted image 20250614134000](./Pasted%20image%2020250614134000.png)
+
+
+### Advanced Features & Improvements
+
+The initial version of this project was great, but real-world use required making it more robust. The current `lambda_function.py` in this repository includes several key upgrades:
+
+* **Markdown File Support:** The function now automatically detects `.md` files. It intelligently strips all Markdown formatting (like headers, bullet points, and links) to produce a clean, natural-sounding audio file.
+
+* **Long-Form Content Processing:** The initial version would fail on long documents due to API limits. The code now automatically splits long texts into smaller chunks, processes each one with Amazon Polly, and seamlessly stitches the audio back together into a single MP3 file.
+
+* **Robust File Name Handling:** The code now correctly handles filenames that contain spaces or other special characters, which previously caused errors.
+
+* **Increased Timeout for Large Files:** To handle the extra processing time required for long documents, the function's timeout has been increased. This ensures even large, complex notes can be converted without interruption.
+
+### Project Evolution & Troubleshooting Steps
+
+This list documents the steps taken to develop the Voice Vault project from a simple script into a robust application.
+
+1. **Corrected Initial Permissions:**
+    
+    - **Problem:** The function executed but no audio file was saved to the output S3 bucket.
+    - **Diagnosis:** CloudWatch logs showed an `AccessDenied` error when calling `s3:PutObject`.
+    - **Action:** The Lambda's IAM Role was updated with `AmazonS3FullAccess` permissions to allow the function to write files to the destination S3 bucket.
+2. **Added Support for Markdown Files (`.md`):**
+    
+    - **Problem:** The function needed to process `.md` files, not just `.txt` files, and intelligently handle the Markdown syntax.
+    - **Action:**
+        - The S3 trigger's suffix filter (`.txt`) was removed.
+        - The Python script was updated to include the `markdown` and `beautifulsoup4` libraries to strip formatting and extract clean, readable text.
+3. **Created a Lambda Deployment Package:**
+    
+    - **Problem:** The new Python libraries were not included in the standard AWS Lambda runtime.
+    - **Action:** A `.zip` deployment package was created by installing the libraries and the `lambda_function.py` script into a local folder and then compressing the contents.
+4. **Corrected Deployment Package Structure:**
+    
+    - **Problem:** The function failed to start, showing a `Runtime.ImportModuleError: No module named 'lambda_function'` in the logs.
+    - **Diagnosis:** The `.zip` file contained a parent folder, preventing Lambda from finding the script at the root level.
+    - **Action:** The `.zip` file was recreated, ensuring all files (the `.py` script and library folders) were at the top level of the archive.
+5. **Added Handling for Filenames with Spaces:**
+    
+    - **Problem:** Files with spaces in their names caused a `NoSuchKey` error.
+    - **Diagnosis:** S3 URL-encodes spaces in filenames within the event notification sent to Lambda (e.g., "My Note.md" becomes "My+Note.md").
+    - **Action:** The Python script was updated to use `urllib.parse.unquote_plus()` to decode the filename back to its original state before trying to access the file in S3.
+6. **Implemented Text Chunking for Long Documents:**
+    
+    - **Problem:** Processing long files resulted in a `TextLengthExceededException` from the Amazon Polly API.
+    - **Diagnosis:** The total text size was larger than Polly's character limit for a single API call.
+    - **Action:** The code was refactored to split the source text into smaller chunks (by paragraph). It now loops through each chunk, converts it to audio, and concatenates the audio streams into a single MP3 file.
+7. **Increased Function Timeout:**
+    
+    - **Problem:** The function was being terminated prematurely when processing large files, resulting in a `Status: timeout` error in the logs.
+    - **Diagnosis:** The default 3-second Lambda timeout was not long enough for the new chunking process.
+    - **Action:** The function's timeout setting was increased in the Lambda configuration to allow sufficient time for processing and saving the audio file.
